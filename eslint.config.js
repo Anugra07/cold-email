@@ -27,3 +27,46 @@ export default tseslint.config(
     },
   }
 );
+
+module.exports = {
+  env: {
+    node: true,
+    es2021: true,
+    jest: true,
+  },
+  extends: [
+    'airbnb-base',
+  ],
+  parserOptions: {
+    ecmaVersion: 'latest',
+    sourceType: 'module',
+  },
+  rules: {
+    // Customize rules as needed
+    'no-console': 'warn',
+    'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    'max-len': ['error', { code: 120, ignoreUrls: true }],
+    'comma-dangle': ['error', 'only-multiline'],
+    'object-curly-spacing': ['error', 'always'],
+    'arrow-parens': ['error', 'as-needed'],
+    'no-underscore-dangle': 'off',
+    'consistent-return': 'off',
+    'func-names': 'off',
+    'no-param-reassign': ['error', { props: false }],
+    'no-plusplus': 'off',
+    'prefer-destructuring': ['error', { object: true, array: false }],
+    'class-methods-use-this': 'off',
+  },
+  overrides: [
+    {
+      files: ['**/*.test.js', '**/*.spec.js', 'tests/**/*.js'],
+      env: {
+        jest: true,
+      },
+      rules: {
+        'no-unused-expressions': 'off',
+        'max-len': 'off',
+      },
+    },
+  ],
+};

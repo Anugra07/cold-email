@@ -1,0 +1,160 @@
+version: '3.8'
+
+services:
+  # Express.js API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: cold-outreach-api
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=mongodb://mongo:27017/cold-outreach
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=dev-jwt-secret-change-in-production
+      - SESSION_SECRET=dev-session-secret-change-in-production
+      # Add your API keys here
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+      # Email configuration
+      - SMTP_PRIMARY_HOST=${SMTP_PRIMARY_HOST}
+      - SMTP_PRIMARY_PORT=${SMTP_PRIMARY_PORT}
+      - SMTP_PRIMARY_USER=${SMTP_PRIMARY_USER}
+      - SMTP_PRIMARY_PASS=${SMTP_PRIMARY_PASS}
+      # CORS
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    networks:
+      - cold-outreach-network
+    restart: unless-stopped
+
+  # MongoDB Database
+  mongo:
+    image: mongo:7.0
+    container_name: cold-outreach-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_INITDB_DATABASE=cold-outreach
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - cold-outreach-network
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7.2-alpine
+    container_name: cold-outreach-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass redispassword
+    volumes:
+      - redis_data:/data
+    networks:
+      - cold-outreach-network
+    restart: unless-stopped
+
+  # MongoDB Admin Interface (optional)
+  mongo-express:
+    image: mongo-express:1.0.0
+    container_name: cold-outreach-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=password
+      - ME_CONFIG_MONGODB_URL=mongodb://admin:password@mongo:27017/
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin
+    depends_on:
+      - mongo
+    networks:
+      - cold-outreach-network
+    restart: unless-stopped
+    profiles:
+      - admin
+
+  # Redis Admin Interface (optional)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: cold-outreach-redis-commander
+    ports:
+      - "8082:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:redispassword
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin
+    depends_on:
+      - redis
+    networks:
+      - cold-outreach-network
+    restart: unless-stopped
+    profiles:
+      - admin
+
+  # Prometheus for metrics (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cold-outreach-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - cold-outreach-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cold-outreach-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - cold-outreach-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+volumes:
+  mongo_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  cold-outreach-network:
+    driver: bridge
