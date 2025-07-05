@@ -1,0 +1,298 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Campaign {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  status      CampaignStatus @default(DRAFT)
+  
+  // Campaign settings
+  emailSubject     String?
+  emailTemplate    String?
+  followUpTemplate String?
+  maxFollowUps     Int     @default(3)
+  followUpDelayHours Int   @default(72)
+  
+  // Targeting criteria
+  targetKeywords   String[]
+  targetJobTitles  String[]
+  targetCompanies  String[]
+  targetLocations  String[]
+  
+  // Sender information
+  senderName  String?
+  senderEmail String?
+  
+  // Tracking
+  totalProspects   Int @default(0)
+  emailsSent       Int @default(0)
+  emailsOpened     Int @default(0)
+  emailsClicked    Int @default(0)
+  emailsReplied    Int @default(0)
+  emailsBounced    Int @default(0)
+  
+  // Relationships
+  prospects Prospect[]
+  emails    Email[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("campaigns")
+}
+
+model Prospect {
+  id           String  @id @default(auto()) @map("_id") @db.ObjectId
+  email        String  @unique
+  firstName    String?
+  lastName     String?
+  fullName     String?
+  jobTitle     String?
+  company      String?
+  location     String?
+  linkedinUrl  String?
+  website      String?
+  phoneNumber  String?
+  
+  // Validation status
+  emailValid    Boolean @default(false)
+  emailVerified Boolean @default(false)
+  
+  // Engagement tracking
+  status         ProspectStatus @default(NEW)
+  lastContactedAt DateTime?
+  followUpCount   Int @default(0)
+  
+  // Scraping metadata
+  sourceUrl      String?
+  scrapedAt      DateTime?
+  confidence     Float? // Confidence score for scraped data
+  
+  // Relationships
+  campaignId String @db.ObjectId
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  emails     Email[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("prospects")
+}
+
+model Email {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  subject     String
+  content     String
+  htmlContent String?
+  
+  // Email type and status
+  type        EmailType @default(INITIAL)
+  status      EmailStatus @default(PENDING)
+  
+  // Sending details
+  fromEmail   String
+  fromName    String?
+  toEmail     String
+  toName      String?
+  
+  // Tracking
+  sentAt      DateTime?
+  openedAt    DateTime?
+  clickedAt   DateTime?
+  repliedAt   DateTime?
+  bouncedAt   DateTime?
+  
+  // Error handling
+  errorMessage String?
+  retryCount   Int @default(0)
+  
+  // SMTP provider used
+  smtpProvider String?
+  
+  // Relationships
+  campaignId String @db.ObjectId
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  prospectId String @db.ObjectId
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("emails")
+}
+
+model BlacklistedEmail {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  email       String  @unique
+  reason      String?
+  addedBy     String? // User who added this email
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("blacklisted_emails")
+}
+
+model ScrapingJob {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  url         String
+  jobTitle    String?
+  keywords    String[]
+  maxResults  Int @default(100)
+  
+  // Job status
+  status      JobStatus @default(PENDING)
+  progress    Float @default(0) // 0-100
+  
+  // Results
+  totalFound    Int @default(0)
+  successCount  Int @default(0)
+  errorCount    Int @default(0)
+  
+  // Error handling
+  errorMessage String?
+  retryCount   Int @default(0)
+  
+  // Timestamps
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("scraping_jobs")
+}
+
+model Analytics {
+  id         String @id @default(auto()) @map("_id") @db.ObjectId
+  date       DateTime
+  
+  // Campaign metrics
+  campaignsCreated Int @default(0)
+  campaignsActive  Int @default(0)
+  
+  // Prospect metrics
+  prospectsAdded    Int @default(0)
+  prospectsContacted Int @default(0)
+  
+  // Email metrics
+  emailsSent      Int @default(0)
+  emailsOpened    Int @default(0)
+  emailsClicked   Int @default(0)
+  emailsReplied   Int @default(0)
+  emailsBounced   Int @default(0)
+  
+  // Scraping metrics
+  scrapingJobsRun Int @default(0)
+  profilesScraped Int @default(0)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([date])
+  @@map("analytics")
+}
+
+model ApiKey {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  keyHash     String  @unique
+  permissions String[] // Array of permissions: ["campaigns:read", "prospects:write", etc.]
+  
+  // Usage tracking
+  lastUsedAt    DateTime?
+  requestCount  Int @default(0)
+  
+  // Status
+  isActive      Boolean @default(true)
+  expiresAt     DateTime?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("api_keys")
+}
+
+model EmailTemplate {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  subject     String
+  content     String
+  htmlContent String?
+  
+  // Template metadata
+  category    String? // "initial", "follow-up", "cold", "warm"
+  tags        String[]
+  isActive    Boolean @default(true)
+  
+  // Usage tracking
+  usageCount  Int @default(0)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("email_templates")
+}
+
+// Enums
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum ProspectStatus {
+  NEW
+  CONTACTED
+  OPENED
+  REPLIED
+  INTERESTED
+  NOT_INTERESTED
+  BOUNCED
+  UNSUBSCRIBED
+}
+
+enum EmailType {
+  INITIAL
+  FOLLOW_UP
+  REPLY
+}
+
+enum EmailStatus {
+  PENDING
+  QUEUED
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  REPLIED
+  BOUNCED
+  FAILED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
